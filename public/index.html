@@ -3,81 +3,206 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/vuetify@3/dist/vuetify.min.css" rel="stylesheet">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WATSON TOOLS</title>
+  <title>Login - WX Document Competitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
-    [v-cloak] {
-      display: none;
+    :root {
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --text-color: #f1f5f9;
+      --border-color: rgba(148, 163, 184, 0.1);
     }
-    iframe {
+
+    body {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-color);
+      background-image: radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%), radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%), radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+      color: var(--text-color);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .login-container {
       width: 100%;
-      height: calc(100vh - 64px); /* App barの高さを引く */
+      max-width: 400px;
+      padding: 2.5rem;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 1.5rem;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.8s ease-out;
+    }
+
+    h1 {
+      text-align: center;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      font-size: 1.75rem;
+      background: linear-gradient(to right, #60a5fa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-top: 0;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      font-weight: 400;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      box-sizing: border-box;
+      border-radius: 0.75rem;
+      border: 1px solid var(--border-color);
+      background: rgba(15, 23, 42, 0.5);
+      color: white;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    button {
+      width: 100%;
+      padding: 0.85rem;
       border: none;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+      margin-top: 1rem;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .error-msg {
+      color: #f87171;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+      text-align: center;
+      min-height: 1.25rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .error-msg.visible {
+      opacity: 1;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
   </style>
 </head>
 
 <body>
-  <div id="app" v-cloak>
-    <v-app>
-      <v-main>
-        <v-container fluid>
-          <v-tabs v-model="tab" grow>
-            <v-tab value="search">ドキュメント文言検索</v-tab>
-            <v-tab value="excel">仕様書検索</v-tab>
-            <v-tab value="import">仕様書登録</v-tab>
-            <v-tab value="llm">LLMテスト</v-tab>
-          </v-tabs>
 
-          <v-window v-model="tab">
-            <v-window-item value="search">
-              <iframe src="search.html"></iframe>
-            </v-window-item>
-            <v-window-item value="excel">
-              <iframe src="excel.html"></iframe>
-            </v-window-item>
-            <v-window-item value="import">
-              <iframe src="import.html"></iframe>
-            </v-window-item>
-            <v-window-item value="llm">
-              <iframe src="llm.html"></iframe>
-            </v-window-item>
-          </v-window>
-        </v-container>
-      </v-main>
-    </v-app>
+  <div class="login-container">
+    <h1>Welcome Back</h1>
+    <p class="subtitle">Please update your credentials to continue</p>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">User ID</label>
+        <input type="text" id="username" placeholder="Enter your ID" autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password">
+      </div>
+
+      <button type="submit">Sign In</button>
+      <div id="errorMsg" class="error-msg">Invalid ID or Password</div>
+    </form>
   </div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
-      "vuetify": "https://unpkg.com/vuetify@3/dist/vuetify.esm.js"
-    }
-  }
-  </script>
+  <script>
+    // --- CONFIGURATION ---
+    // ひとまずHTML内に定数で定義
+    const VALID_USER_ID = "admin";
+    const VALID_PASSWORD = "password";
+    const TARGET_PAGE = "main.html";
+    // ---------------------
 
-  <script type="module">
-    import { createApp } from 'vue';
-    import { createVuetify, components, directives } from 'vuetify';
+    document.getElementById('loginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
 
-    const vuetify = createVuetify({
-      components,
-      directives
+      const idInput = document.getElementById('username').value;
+      const passInput = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+
+      if (idInput === VALID_USER_ID && passInput === VALID_PASSWORD) {
+        // Success
+        errorMsg.classList.remove('visible');
+        // Optional: Animation or loading state here
+        window.location.href = TARGET_PAGE;
+      } else {
+        // Failure
+        errorMsg.classList.add('visible');
+
+        // Shake animation for visual feedback
+        const container = document.querySelector('.login-container');
+        container.animate([
+          { transform: 'translateX(0)' },
+          { transform: 'translateX(-5px)' },
+          { transform: 'translateX(5px)' },
+          { transform: 'translateX(0)' }
+        ], {
+          duration: 300,
+          iterations: 1
+        });
+      }
     });
-
-    const app = createApp({
-      data: () => ({
-        tab: 'search', // デフォルトタブ
-      }),
-    });
-
-    app.use(vuetify);
-    app.mount('#app');
   </script>
 </body>
 

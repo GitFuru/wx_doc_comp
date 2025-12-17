@@ -60,6 +60,10 @@ def main():
     print(f"Region: {REGION}")
     print(f"Project ID: {PROJECT_ID}")
     print(f"Repo: {GIT_REPO_URL} ({GIT_BRANCH})")
+    if REGISTRY_SECRET_NAME:
+        print(f"Registry Secret: {REGISTRY_SECRET_NAME}")
+    else:
+        print("Registry Secret: <NOT SET> (Pushing to private registry will fail)")
     print(f"Target Image: {IMAGE_URL}")
     print(f"App Port: {APP_PORT}")
     print(f"Min Instances: {APP_MIN_INSTANCES}")
