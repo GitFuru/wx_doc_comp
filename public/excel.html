@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.x/css/materialdesignicons.min.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.x/dist/vuetify.min.css" rel="stylesheet"/>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>仕様書検索</title>
+    <style>
+      [v-cloak] {
+        display: none;
+      }
+      .ws-preline {
+        white-space: pre-line;
+      }
+      .v-data-table--fixed-header > .v-table__wrapper {
+        overflow: auto;
+      }
+
+      /* Custom header styles */
+      .v-data-table > .v-table__wrapper > table > thead > tr > th {
+        position: sticky;
+        top: 0;
+        z-index: 2; /* Ensure it's above the content */
+        background: #ffffff;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+        line-height: 1.2; /* テキストが複数行になる場合を考慮 */
+        box-sizing: border-box;
+      }
+      
+      /* チェックボックス列の幅を設定 */
+      .v-data-table > .v-table__wrapper > table > thead > tr > th.v-data-table__th > .v-checkbox {
+        min-width: 2rem;
+      }
+
+      .v-data-table > .v-table__wrapper > table > tbody > tr > td {
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+        box-sizing: border-box;
+      }
+
+      .text-center {
+        text-align: center !important;
+      }
+
+      .oy-box {
+        max-height: 5rem;
+        overflow-y: scroll;
+        overflow-x: auto;
+        align-items: start !important;
+        white-space: pre-wrap;
+        text-overflow: ellipsis;
+      }
+
+      .summary_box {
+        max-height: 1.5rem;
+        overflow-y: scroll;
+        align-items: start !important;
+      }
+
+      .color_ai {
+        background-color: lightpink !important;
+      }
+
+      .color_pr1 {
+        background-color: lightcoral !important;
+      }
+      .color_pr2 {
+        background-color: lightseagreen !important;
+      }
+      .color_pr3 {
+        background-color: cornsilk !important;
+      }
+
+      .pr-box {
+        display: flex;
+        flex-direction: column; /* 要素を縦に並べる */
+        height: 100%; /* 親要素（セル）の高さ全体に広がる */
+      }
+      .pr-item {
+        flex: 1; /* 利用可能なスペースを均等に分け合う */
+        display: flex;
+        align-items: center; /* テキストを上下中央に配置 */
+        justify-content: center; /* テキストを左右中央に配置 */
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="app" v-cloak>
+      <v-app>
+        <v-snackbar
+          v-model="toast.show"
+          bottom
+          multi-line
+          :timeout="toast.timeout"
+          :color="toast.type"
+          @click="toast.show = false">
+          <div class="ws-preline">{{ toast.text }}</div>
+        </v-snackbar>
+
+        <v-main>
+          <v-container fluid class="">
+            <!-- コレクション読み込みセクション -->
+            <v-card class="ma-2 pa-4">
+              <v-select
+                label="Collections"
+                variant="outlined"
+                density="compact"
+                :items="dc_collections"
+                item-title="name"
+                item-value="collection_id"
+                v-model="dc_collections_selected"
+                return-object
+                hide-details
+              ></v-select>
+            </v-card>
+
+            <!-- ファイル読み込みセクション -->
+            <v-card class="ma-2 pa-4">
+              <div class="file_droparea" @dragover.prevent @drop="handleDrop">
+                <v-file-input
+                  v-model="import_file"
+                  show-size
+                  label="Excel(新規)、JSON(継続)ファイル を選択またはドロップしてください"
+                  placeholder="ここにファイルをドロップすることもできます"
+                  accept=".xlsx, .xls, .json, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, application/json"
+                  hide-details
+                  @update:model-value="onFileChange"
+                  :loading="isLoading"
+                ></v-file-input>
+              </div>
+
+              <div v-if="import_count > 0">
+                <div v-if="!isBatchRunning">
+                  <div class="d-flex justify-end mt-4 align-center">
+                    <div class="wdt12 mr-4">
+                      <div class="text-caption">検索一致度閾値</div>
+                      <v-slider
+                        v-model="confidenceThreshold"
+                        min="0"
+                        max="100"
+                        step="1"
+                        hide-details
+                        density="compact"
+                        thumb-label
+                      >
+                        <template v-slot:thumb-label="{ modelValue }">
+                          {{ modelValue }}%
+                        </template>
+                      </v-slider>
+                    </div>
+
+                    <v-switch
+                      v-model="is_judge"
+                      label="AI判定を実行"
+                      class="mr-4"
+                      hide-details
+                      @update:model-value="handleJudgeToggle"
+                    ></v-switch>
+
+                    <v-btn
+                      color="info"
+                      class="mr-2"
+                      :disabled="selected_rows.length === 0"
+                      @click="runOnSelected"
+                    >
+                      <v-icon start>mdi-checkbox-marked-outline</v-icon>
+                      選択行を判定 ({{ selected_rows.length }}件)
+                    </v-btn>
+                    <v-btn color="orange" variant="elevated" @click="runOnAll">
+                      <v-icon start>mdi-robot-happy-outline</v-icon>
+                      全行を判定 ({{ import_datas.length }}件)
+                    </v-btn>
+
+                  </div>
+                </div>
+                <div v-else>
+                  <v-row align="center" class="mt-4">
+                    <v-col cols="8">
+                      <v-progress-linear
+                        :value="batchProgress"
+                        height="25"
+                        dark
+                        stream
+                        color="blue-grey"
+                      >
+                        <strong>{{ Math.ceil(batchProgress) }}% ({{ processedCount }} / {{ totalToProcess }})</strong>
+                      </v-progress-linear>
+                    </v-col>
+                    <v-col cols="4" class="d-flex justify-end">
+                      <v-btn color="red" variant="elevated" @click="cancelRun">
+                        <v-icon start>mdi-cancel</v-icon>
+                        中断
+                      </v-btn>
+                    </v-col>
+                  </v-row>
+                </div>
+              </div>
+            </v-card>
+
+            <!-- データ表示テーブル -->
+            <v-card class="ma-2">
+              <v-card-title class="primary--text">判定する要件一覧</v-card-title>
+              <v-card-text class="">
+                <v-data-table
+                    show-select
+                    height="63vh"
+                    :headers="import_tbl_headers"
+                    :items="import_datas"
+                    :items-per-page="20"
+                    :footer-props="{
+                      'items-per-page-options': [10, 20, 50, 100, -1],
+                      'items-per-page-text': '行数:'
+                    }"
+                    no-data-text="データがありません"
+                    item-key="no"
+                    fixed-header
+                    :hide-default-header="false"
+                    :key="'table-' + is_judge"
+                    ref="dataTable">
+
+                  <!-- ヘッダーチェックボックス -->
+                  <template v-slot:[`header.data-table-select`]="{ props, on }">
+                    <v-checkbox
+                      density="compact"
+                      hide-details
+                      :model-value="selected_rows.length === import_datas.length && import_datas.length > 0"
+                      :indeterminate="selected_rows.length > 0 && selected_rows.length < import_datas.length"
+                      @update:model-value="handleSelectAll"
+                    ></v-checkbox>
+                  </template>
+
+                  <template v-slot:header="{ props, on }">
+                    <thead>
+                      <tr>
+                        <th v-for="(header, index) in import_tbl_headers"
+                          :key="header.key"
+                          :class="header.class">
+                          <div>{{ header.title }}</div>
+                        </th>
+                      </tr>
+                    </thead>
+                  </template>
+
+                  <!-- ボディのチェックボックスをカスタムスロットで実装 -->
+                  <template v-slot:[`item.data-table-select`]="{ item }">
+                    <v-checkbox
+                      density="compact"
+                      hide-details
+                      :model-value="item.selected"
+                      @update:model-value="toggleRowSelection(item, $event)"
+                    ></v-checkbox>
+                  </template>
+
+                  <template v-slot:[`item.検索要件`]="{ item }">
+                    <div class="oy-box">{{ item.検索要件 }}</div>
+                  </template>
+
+                  <!-- 固定列 -->
+                  <template v-slot:[`item.priority`]="{ item }">
+                    <div class="pr-box">
+                      <div class="pr-item color_pr1">優先度1</div>
+                      <div class="pr-item color_pr2">優先度2</div>
+                      <div class="pr-item color_pr3">優先度3</div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.wditem_judge`]="{ item }">
+                    <wd-item-cell :item="item" display-type="judge" :is-judge="is_judge"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.wditem_score`]="{ item }">
+                    <wd-item-cell :item="item" display-type="score" :is-judge="is_judge"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.wditem_reason`]="{ item }">
+                    <wd-item-cell :item="item" display-type="reason" :is-judge="is_judge"></wd-item-cell>
+                  </template>
+
+                  <template v-slot:[`item.カテゴリ`]="{ item }">
+                    <wd-item-cell :item="item" field="カテゴリ"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.要件`]="{ item }">
+                    <wd-item-cell :item="item" field="要件" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.回答`]="{ item }">
+                    <wd-item-cell :item="item" field="回答"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.備考／補足`]="{ item }">
+                    <wd-item-cell :item="item" field="備考／補足" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.変更区分`]="{ item }">
+                    <wd-item-cell :item="item" field="変更区分" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.意見`]="{ item }">
+                    <wd-item-cell :item="item" field="意見" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.変更後要件`]="{ item }">
+                    <wd-item-cell :item="item" field="変更後要件" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.Ｓｉｅｒ向けコメント`]="{ item }">
+                    <wd-item-cell :item="item" field="Ｓｉｅｒ向けコメント" :needs-summary="true"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.工数`]="{ item }">
+                    <wd-item-cell :item="item" field="工数"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.社内向けコメント`]="{ item }">
+                    <wd-item-cell :item="item" field="社内向けコメント" :needs-summary="true"></wd-item-cell>
+                  </template>
+
+                  <template v-slot:[`item.シート名`]="{ item }">
+                    <wd-item-cell :item="item" field="シート名"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.シート行番号`]="{ item }">
+                    <wd-item-cell :item="item" field="シート行番号"></wd-item-cell>
+                  </template>
+                  <template v-slot:[`item.ファイル名`]="{ item }">
+                    <wd-item-cell :item="item" field="ファイル名"></wd-item-cell>
+                  </template>
+
+                </v-data-table>
+              </v-card-text>
+
+              <v-card-actions class="justify-end pa-4">
+                <div>
+                  <v-tooltip text="JSON形式で中間データをエクスポート" location="bottom">
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        color="secondary"
+                        fab
+                        small
+                        :disabled="import_count === 0"
+                        v-bind="props"
+                        @click="createJSONfile()">
+                        <v-icon>mdi-code-json</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+
+                  <v-tooltip text="Excel形式でエクスポート" location="bottom">
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        color="success"
+                        fab
+                        small
+                        class="ml-2"
+                        :disabled="import_count === 0"
+                        v-bind="props"
+                        @click="createXlSXfile()">
+                        <v-icon>mdi-file-excel</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+                </div>
+              </v-card-actions>
+            </v-card>
+          </v-container>
+        </v-main>
+      </v-app>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
+        "vuetify": "https://unpkg.com/vuetify@3/dist/vuetify.esm.js"
+      }
+    }
+    </script>
+    <!-- テンプレート要素を追加 -->
+    <script type="text/x-template" id="wd-item-template">
+      <div class="pr-box">
+        <!-- Default Display -->
+        <div v-if="displayType === 'default'" class="display-content">
+          <div :class="['pr-item', 'color_pr1', needsSummary ? 'summary_box' : '']" v-if="item.wditem1">
+            {{ field === 'シート行番号' ? item.wditem1['行番号'] : item.wditem1[field] }}
+          </div>
+          <div :class="['pr-item', 'color_pr2', needsSummary ? 'summary_box' : '']" v-if="item.wditem2">
+            {{ field === 'シート行番号' ? item.wditem2['行番号'] : item.wditem2[field] }}
+          </div>
+          <div :class="['pr-item', 'color_pr3', needsSummary ? 'summary_box' : '']" v-if="item.wditem3">
+            {{ field === 'シート行番号' ? item.wditem3['行番号'] : item.wditem3[field] }}
+          </div>
+        </div>
+
+        <!-- Judge Display -->
+        <div v-else-if="displayType === 'judge'" class="display-content">
+          <div class="pr-item color_pr1">
+            <v-progress-circular v-if="item.wditem1 && item.wditem1.isLoading" indeterminate color="primary" size="20"></v-progress-circular>
+            <div v-else-if="item.wditem1 && item.wditem1.ai_result">
+                {{ item.wditem1.ai_result.judge }}
+            </div>
+          </div>
+          <div class="pr-item color_pr2">
+            <v-progress-circular v-if="item.wditem2 && item.wditem2.isLoading" indeterminate color="primary" size="20"></v-progress-circular>
+            <div v-if="item.wditem2 && item.wditem2.ai_result">
+                {{ item.wditem2.ai_result.judge }}
+            </div>
+          </div>
+          <div class="pr-item color_pr3">
+            <v-progress-circular v-if="item.wditem3 && item.wditem3.isLoading" indeterminate color="primary" size="20"></v-progress-circular>
+            <div v-if="item.wditem3 && item.wditem3.ai_result">
+                {{ item.wditem3.ai_result.judge }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Score Display -->
+        <div v-else-if="displayType === 'score'" class="display-content">
+          <div class="pr-item color_pr1">
+            <span v-if="item.wditem1 && item.wditem1.ai_result && item.wditem1.ai_result.score">{{ item.wditem1.ai_result.score }}</span>
+          </div>
+          <div class="pr-item color_pr2">
+            <span v-if="item.wditem2 && item.wditem2.ai_result && item.wditem2.ai_result.score">{{ item.wditem2.ai_result.score }}</span>
+          </div>
+          <div class="pr-item color_pr3">
+            <span v-if="item.wditem3 && item.wditem3.ai_result && item.wditem3.ai_result.score">{{ item.wditem3.ai_result.score }}</span>
+          </div>
+        </div>
+
+        <!-- Reason Display -->
+        <div v-else-if="displayType === 'reason'" class="display-content">
+          <div :class="['pr-item', 'color_pr1', 'summary_box']" v-if="item.wditem1 && item.wditem1.ai_result">{{ item.wditem1.ai_result.reason }}</div>
+          <div :class="['pr-item', 'color_pr2', 'summary_box']" v-if="item.wditem2 && item.wditem2.ai_result">{{ item.wditem2.ai_result.reason }}</div>
+          <div :class="['pr-item', 'color_pr3', 'summary_box']" v-if="item.wditem3 && item.wditem3.ai_result">{{ item.wditem3.ai_result.reason }}</div>
+        </div>
+
+      </div>
+    </script>
+
+    <script type="module">
+      // WatsonAPIsクラスを外部モジュールからインポート
+      import { WatsonAPIs } from './watson-exec.js';
+      import { createApp } from 'vue';
+      import { createVuetify, components, directives } from 'vuetify';
+
+      const vuetify = createVuetify({
+        components,
+        directives
+      });
+
+      const WdItemCell = {
+        props: {
+          item: Object,
+          field: String,
+          displayType: {
+            type: String,
+            default: 'default'
+          },
+          needsSummary: {
+            type: Boolean,
+            default: false
+          }
+        },
+        methods: {
+         getChipColor(judge) {
+             if (judge === '高') return 'green';
+             if (judge === '中') return 'orange';
+             if (judge === '低') return 'red';
+             return 'grey';
+         }
+       },
+        template: '#wd-item-template'
+      };
+
+      const XLSX = window.XLSX;
+
+      // WatsonAPIsのインスタンスを作成
+      const watsonAPIs = new WatsonAPIs();
+
+      const app = createApp({
+        components: {
+          'wd-item-cell': WdItemCell
+        },
+
+        data:() =>({
+          // --- サービスインスタンス ---
+          watsonAPIs: watsonAPIs,
+
+          // --- コンポーネントの状態 ---
+          toast: { show: false, timeout: 4000, type: 'primary', text: '' },
+          isLoading: false,
+          isBatchRunning: false,
+          isCancelled: false,
+          batchProgress: 0,
+          processedCount: 0,
+          totalToProcess: 0,
+          current_sheet_name: '',  // シート名を保存する変数を追加
+
+          // スキップする回答の値のリスト
+          ignore_list: ['', '-', '---','－'],
+
+          // --- UIと連動するデータ ---
+          dc_paramjson: JSON.stringify(watsonAPIs.defaultDiscoveryParams, null, 2),
+          dc_collections: [],
+          dc_collections_selected: [],
+          confidenceThreshold: 50.0,
+
+          is_judge: true,
+
+          import_file: null,
+          import_filename: '',
+          import_count: 0,
+          import_datas: [],
+          selected_rows: [],
+          // 基本ヘッダー（常に表示）
+          base_tbl_headers: [
+            { title:'行番号', key:'行番号', minWidth:'4rem'},
+            { title:'検索カテゴリ', key:'検索カテゴリ', minWidth:'8rem' },
+            { title:'検索要件', key:'検索要件', minWidth:'20rem', maxWidth:'20rem', cellClass:"" },
+            { title:'　　　　', key:'priority', minWidth:'6rem' },
+          ],
+          
+          // AI関連ヘッダー（条件付き表示）
+          ai_tbl_headers: [
+            { title:'AI 判定', key:'wditem_judge', minWidth:'4rem' },
+            { title:'AI スコア', key:'wditem_score', minWidth:'4rem' },
+            { title:'AI 理由', key:'wditem_reason', minWidth:'20rem', maxWidth:'20rem' },
+          ],
+          
+          // その他の項目ヘッダー
+          other_tbl_headers: [
+            { title:'カテゴリ', key:'カテゴリ', minWidth:'8rem'  },
+            { title:'要件', key:'要件', minWidth:'20rem', maxWidth:'20rem' },
+            { title:'回答', key:'回答', minWidth:'4rem' },
+            { title:'備考／補足', key:'備考／補足', minWidth:'12rem' },
+            { title:'変更区分', key:'変更区分', minWidth:'6rem' },
+            { title:'意見', key:'意見', minWidth:'12rem' },
+            { title:'変更後要件', key:'変更後要件', minWidth:'12rem' },
+            { title:'Ｓｉｅｒ向けコメント', key:'Ｓｉｅｒ向けコメント', minWidth:'12rem' },
+            { title:'工数', key:'工数', minWidth:'5rem' },
+            { title:'社内向けコメント', key:'社内向けコメント', minWidth:'12rem' },
+
+            { title:'シート名', key:'シート名', minWidth:'12rem' },
+            { title:'シート行番号', key:'シート行番号', minWidth:'5rem' },
+            { title:'ファイル名', key:'ファイル名', minWidth:'8rem'  },
+          ]
+        }),
+
+        computed: {
+          // is_judgeの状態に応じてヘッダーを動的に生成
+          import_tbl_headers() {
+            if (this.is_judge) {
+              return [...this.base_tbl_headers, ...this.ai_tbl_headers, ...this.other_tbl_headers];
+            } else {
+              return [...this.base_tbl_headers, ...this.other_tbl_headers];
+            }
+          }
+        },
+        
+        watch: {
+          dc_collections_selected: function (cid) {
+            console.log('[dc_collections_selected]', cid)
+            let param = JSON.parse(this.dc_paramjson)
+            param.collection_ids = [cid.collection_id]
+            this.dc_paramjson = JSON.stringify(param, null, 2)
+          },
+          import_datas: {
+            handler() {
+              this.updateSelectedRowsFromItems();
+            },
+            deep: true
+          },
+          // is_judgeの変更を最適化
+          is_judge: {
+            handler() {
+              // nextTickを使ってDOMの更新後に処理を行う
+              this.$nextTick(() => {
+                if (this.$refs.dataTable) {
+                  // 表テーブルの強制更新
+                  this.$refs.dataTable.$forceUpdate();
+                }
+              });
+            }
+          }
+        },
+
+        methods: {
+          getItemConfidence(item) {
+            if (item.document_passages && 
+                item.document_passages.length > 0 && 
+                item.document_passages[0].answers && 
+                item.document_passages[0].answers.length > 0) {
+              return item.document_passages[0].answers[0].confidence;
+            }
+            return 0;
+          },
+
+          showToast(msg, type = 'info') {
+             this.toast.text = msg
+             this.toast.type = type
+             this.toast.show = true
+          },
+
+          // selected_rowsをアイテムのselectedプロパティから同期（初期化や手動同期用）
+          updateSelectedRowsFromItems() {
+            const prevSelected = [...this.selected_rows];
+            this.selected_rows = this.import_datas.filter(item => item.selected);
+            if (prevSelected.length !== this.selected_rows.length) {
+              // console.log('updateSelectedRowsFromItems: selected count changed from', prevSelected.length, 'to', this.selected_rows.length);
+              console.log(this.selected_rows);
+            }
+          },
+
+          // 行選択を処理するメソッド（個別チェックボックスのクリック用）
+           toggleRowSelection(item, checked) {
+             console.log('toggleRowSelection called:', { item_no: item.no, checked });
+             item.selected = checked;
+             this.updateSelectedRowsFromItems();
+           },
+
+          // 全選択/解除の処理
+           handleSelectAll(checked) {
+             console.log('handleSelectAll called:', checked);
+             this.import_datas.forEach(item => {
+               item.selected = checked;
+             });
+             this.updateSelectedRowsFromItems();
+           },
+
+           // AI判定Switchの変更処理
+           handleJudgeToggle(value) {
+             console.log('AI判定Switch toggled:', value);
+             this.is_judge = value;
+             // Vue 3ではリアクティブデータが自動的に更新されるので、
+             // computedプロパティが再評価されてテーブルが更新される
+           },
+
+          getChipColor(judge) {
+            if (judge === '○') return 'green'
+            if (judge === '×') return 'red'
+            return 'grey'
+          },
+
+          async listCollections(showtoast) {
+            const collections = await this.watsonAPIs.fetchCollections()
+            if (collections) {
+              this.dc_collections = collections
+              if (showtoast) this.showToast('コレクションの取得が完了しました')
+            } else {
+              this.dc_collections = []
+              if (showtoast) this.showToast('コレクションの取得が失敗しました')
+            }
+          },
+
+          handleDrop(event) {
+            event.preventDefault()
+            const file = event.dataTransfer.files[0]
+            const allowedExtensions = /(\.xlsx|\.xls|\.json)$/i
+            if (file && allowedExtensions.exec(file.name)) {
+              this.import_file = file
+              this.onFileChange(file)
+            } else {
+              this.import_file = null
+              this.showToast(
+                'ExcelまたはJSONファイルを選択してください。',
+                'error'
+              )
+            }
+          },
+
+          onFileChange(file) {
+            if (file) {
+              this.readFile(file)
+            }
+          },
+
+          processJsonArray(data) {
+            return data.reduce((acc, currentItem, index) => {
+              const answer = currentItem['回答']
+              if (this.ignore_list.includes(answer)) {
+                return acc
+              }
+              
+              const newItem = {
+                行番号: index +2, // Excelの行番号 0 index と ヘッダ行分を加算
+                検索カテゴリ: currentItem['カテゴリ'],
+                検索要件: currentItem['要件'],
+                selected: false, // チェックボックス用の状態を追加
+                wditem1: null,
+                wditem2: null,
+                wditem3: null,
+                isLoading: false,
+              }
+              acc.push(newItem)
+              return acc
+            }, [])
+          },
+
+          async readFile(file) {
+            this.isLoading = true
+            this.resetState()
+            if (file) {
+              try {
+                this.import_filename = file.name // ファイル名を保持
+                const fileExtension = file.name.split('.').pop().toLowerCase()
+
+                if (fileExtension === 'json') {
+                  // JSONファイルの処理
+                  const jsonData = await this.readJSON(file)
+                  // JSONデータは既に処理済みの形式なので直接代入
+                  this.import_datas = jsonData
+                } else if (
+                  fileExtension === 'xlsx' ||
+                  fileExtension === 'xls'
+                ) {
+                  // Excelファイルの処理
+                  const raw_datas = await this.readXLSX(file)
+                  console.log(raw_datas);
+                  this.import_datas = this.processJsonArray(raw_datas)
+                  console.log(this.import_datas);
+                } else {
+                  throw new Error('サポートされていないファイル形式です。')
+                }
+              } catch (e) {
+                this.showToast(
+                  `ファイルの読み込みに失敗しました: ${e.message}`,
+                  'error'
+                )
+                this.import_datas = [] // エラー時はデータをクリア
+              }
+            }
+            this.import_count = this.import_datas.length
+            this.isLoading = false
+          },
+
+          resetState() {
+            this.import_datas = []
+            this.import_count = 0
+            this.selected_rows = []
+            this.isCancelled = false
+            this.batchProgress = 0
+            this.processedCount = 0
+            this.totalToProcess = 0
+          },
+
+          async getXLSXFromFile(file) {
+            return new Promise((resolve, reject) => {
+              try {
+                const reader = new FileReader()
+                reader.readAsArrayBuffer(file)
+                reader.onload = event => resolve(event.target?.result)
+                reader.onerror = event =>
+                  reject(new Error('File reading error', event))
+              } catch (error) {
+                reject(error)
+              }
+            })
+          },
+
+          async readXLSX(file) {
+            let data = await this.getXLSXFromFile(file)
+            if (!data) return []
+            this.import_filename = file.name
+            const workbook = XLSX.read(data, { type: 'array' })
+            // シート名を保存
+            this.current_sheet_name = workbook.SheetNames[0]
+            const worksheet = workbook.Sheets[this.current_sheet_name]
+            
+            // ワークシートの範囲を取得
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+            console.log('Sheet range:', range);
+            
+            const dataAsArray = XLSX.utils.sheet_to_json(worksheet, {
+              header: 1,       // 1行目をヘッダーとして扱う
+              defval: '',      // 空セルのデフォルト値
+              blankrows: "**", // 空行を含める
+              raw: true,       // 生の値を取得
+              range: range     // シート全体の範囲を明示的に指定
+            })
+            console.log('Parsed data rows:', dataAsArray.length);
+
+            if (dataAsArray.length < 2) {
+              return []
+            }
+            const headers = dataAsArray[0]
+            const dataRows = dataAsArray.slice(1)
+            return dataRows.map(row => {
+              const rowObject = {}
+              headers.forEach((header, index) => {
+                if (header) rowObject[String(header)] = row[index]
+              })
+              return rowObject
+            })
+          },
+
+          async readJSON(file) {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = event => {
+                try {
+                  const jsonData = JSON.parse(event.target.result)
+                  resolve(jsonData)
+                } catch (event) {
+                  reject(new Error('JSONの解析に失敗しました。', event))
+                }
+              }
+              reader.onerror = event => {
+                reject(
+                  new Error('ファイルの読み込み中にエラーが発生しました。', event)
+                )
+              }
+              reader.readAsText(file)
+            })
+          },
+
+          runOnSelected() {
+            this.onSendAIJudgeBtn(this.selected_rows);
+          },
+          runOnAll() {
+            this.onSendAIJudgeBtn(this.import_datas)
+          },
+
+          async onSendAIJudgeBtn(items) {
+            if (!items || items.length === 0) {
+              this.showToast('対象のデータがありません。', 'warning')
+              return
+            }
+
+            this.isBatchRunning = true
+            this.isCancelled = false
+            this.processedCount = 0
+            this.totalToProcess = items.length
+            this.batchProgress = 0
+
+            for (const item of items) {
+              if (this.isCancelled) {
+                this.showToast('処理を中断しました。', 'info')
+                break
+              }
+
+              // Vue 3ではオブジェクトプロパティへの直接代入が可能
+              item.isLoading = true;
+
+              try {
+                if (!item.wditem1?.id) {
+                  // execute wd search
+                  const currentParams = JSON.parse(this.dc_paramjson)
+                  const resultWDJson = await this.watsonAPIs.executeQuery(
+                    item.検索要件,
+                    currentParams
+                  )
+                  console.log("WD Search Result: ", resultWDJson);
+                  let wd_results = [];
+                  if (resultWDJson && resultWDJson.results) {
+                    // 閾値でフィルタリング
+                    wd_results = resultWDJson.results.filter(res => {
+                      return this.getItemConfidence(res) >= (this.confidenceThreshold / 100);
+                    });
+                    wd_results = wd_results.slice(0, 3);
+                  }
+
+                  // バッチ処理して一度に更新する準備
+                  const updatedItems = {};
+                  for (let i = 1; i <= 3; i++) {
+                    updatedItems[`wditem${i}`] = wd_results[i-1] || {};
+                  }
+                  
+                  // 一括でオブジェクトを更新
+                  Object.assign(item, updatedItems);
+                }
+
+                // is_judgeがtrueの場合のみ判定処理を実行
+                if (this.is_judge && item.wditem1) {
+                  await this.watsonAPIs.processAIJudgements(
+                    [item.wditem1, item.wditem2, item.wditem3].filter(wd => wd && wd['要件']),
+                    item.検索要件,
+                    (index, updatedDiscoveryItem) => {
+                      const itemIndex = index + 1
+                      const wdItemKey = `wditem${itemIndex}`
+                      if (updatedDiscoveryItem)
+                        // Vue 3では直接代入が可能
+                        item[wdItemKey] = {...item[wdItemKey], ...updatedDiscoveryItem};
+                    }
+                  )
+                }
+              } catch (error) {
+                console.error(`AI判定エラー (Item No: ${item.no}):`, error)
+                const errorResult = {
+                  ai_result: { judge: 'エラー', reason: error.message },
+                  isLoading: false
+                }
+                // Vue 3では直接代入が可能
+                item.wditem1 = errorResult;
+              } finally {
+                // Vue 3では直接代入が可能
+                item.isLoading = false;
+                this.processedCount++
+                this.batchProgress =
+                  (this.processedCount / this.totalToProcess) * 100
+              }
+            }
+
+            if (!this.isCancelled) {
+              this.showToast('AI判定が完了しました。', 'success')
+            }
+
+            this.isBatchRunning = false
+          },
+
+          cancelRun() {
+            this.isCancelled = true
+            this.showToast('処理を中断しています...', 'warning')
+          },
+
+          createXlSXfile() {
+            if (this.import_count === 0) {
+              this.showToast('エクスポートするデータがありません。', 'warning');
+              return;
+            }
+            try {
+              // --- ヘッダー定義 ---
+              const baseHeaders = ['行番号', '検索カテゴリ', '検索要件'];
+              const prioritySubHeaders = [
+                'カテゴリ', '要件', '回答', '備考／補足', '変更区分', '意見', '変更後要件',
+                'Ｓｉｅｒ向けコメント', '工数', '社内向けコメント',
+                'シート名', 'シート行番号', 'ファイル名', 'AI判定', 'AIスコア', 'AI理由',
+              ];
+
+              const headerRow1 = [...baseHeaders];
+              const headerRow2 = [...baseHeaders.map(() => '')];
+              const merges = [];
+              const colsPerPriority = prioritySubHeaders.length;
+
+              ['優先度1', '優先度2', '優先度3'].forEach((priority, index) => {
+                headerRow1.push(priority, ...Array(colsPerPriority - 1).fill(''));
+                headerRow2.push(...prioritySubHeaders);
+                const startCol = baseHeaders.length + index * colsPerPriority;
+                merges.push({
+                  s: { r: 0, c: startCol },
+                  e: { r: 0, c: startCol + colsPerPriority - 1 },
+                });
+              });
+
+              baseHeaders.forEach((_, colIndex) => {
+                merges.push({ s: { r: 0, c: colIndex }, e: { r: 1, c: colIndex } });
+              });
+
+              // --- データ行の生成 ---
+              const dataRows = this.import_datas.map(item => {
+                const row = [item.行番号, item.検索カテゴリ, item.検索要件];
+                for (let i = 1; i <= 3; i++) {
+                  const wditem = item[`wditem${i}`];
+                  row.push(
+                    wditem?.['カテゴリ'] ?? null, wditem?.['要件'] ?? null, wditem?.['回答'] ?? null, wditem?.['備考／補足'] ?? null,
+                    wditem?.['変更区分'] ?? null, wditem?.['意見'] ?? null, wditem?.['変更後要件'] ?? null,
+                    wditem?.['Ｓｉｅｒ向けコメント'] ?? null, wditem?.['工数'] ?? null, wditem?.['社内向けコメント'] ?? null,
+                    wditem?.['シート名'] ?? null, wditem?.['行番号'] ?? null, wditem?.['ファイル名'] ?? null,
+                    wditem?.ai_result?.judge ?? null, wditem?.ai_result?.score ?? null, wditem?.ai_result?.reason ?? null
+                  );
+                }
+                return row;
+              });
+
+              // --- シートの作成 ---
+              const finalSheetData = [headerRow1, headerRow2, ...dataRows];
+              const worksheet = XLSX.utils.aoa_to_sheet(finalSheetData);
+              worksheet['!merges'] = merges;
+              
+              // --- ヘッダーにのみ色を付ける処理 ---
+              const P1_COLOR = "F08080"; // lightcoral
+              const P2_COLOR = "20B2AA"; // lightseagreen
+              const P3_COLOR = "FFF8DC"; // cornsilk
+
+              const priorityColors = [P1_COLOR, P2_COLOR, P3_COLOR];
+
+              priorityColors.forEach((color, idx) => {
+                const startCol = baseHeaders.length + idx * colsPerPriority;
+
+                // 1行目（優先度X 見出し）
+                const header1Addr = XLSX.utils.encode_cell({ r: 0, c: startCol });
+                if (worksheet[header1Addr]) {
+                  worksheet[header1Addr].s = {
+                    fill: { patternType: "solid", fgColor: { rgb: color } },
+                    font: { bold: true }
+                  };
+                }
+
+                // 2行目（要件, 回答, …, AI理由 の小見出し全列）
+                for (let j = 0; j < colsPerPriority; j++) {
+                  const header2Addr = XLSX.utils.encode_cell({ r: 1, c: startCol + j });
+                  if (worksheet[header2Addr]) {
+                    worksheet[header2Addr].s = {
+                      fill: { patternType: "solid", fgColor: { rgb: color } },
+                      font: { bold: true }
+                    };
+                  }
+                }
+              });
+
+              // --- ファイルの出力 ---
+              const workbook = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+              const filename = this.import_filename.replace(/(\.[\w\d_-]+)$/i, '_results.xlsx');
+              XLSX.writeFile(workbook, filename, { compression: true });
+              this.showToast('Excelファイルを出力しました。', 'success');
+            } catch (e) {
+              this.showToast(`Excelファイルの出力に失敗しました: ${e.message}`, 'error');
+            }
+          },
+
+          createJSONfile() {
+            if (this.import_count === 0) {
+              this.showToast('エクスポートするデータがありません。', 'warning')
+              return
+            }
+            try {
+              // JSONファイル出力前に、isLoadingプロパティを削除したオブジェクトのコピーを作成する
+              const dataToExport = this.import_datas.map(item => {
+                // オブジェクトからisLoadingプロパティを除外
+                // isLoadingはUI上の一時的な状態を表すフラグで、JSONとして保存する必要がない
+                const { isLoading, ...cleanedItem } = item
+                return cleanedItem // isLoadingを除いた残りのプロパティを含むオブジェクトを返す
+              })
+              const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
+                type: 'application/json'
+              })
+              const ele = document.createElement('a')
+              ele.href = window.URL.createObjectURL(blob)
+              const filename = this.import_filename.replace(
+                /(\.[\w\d_-]+)$/i,
+                '_results.json'
+              )
+              ele.download = filename
+              ele.style.visibility = 'hidden'
+              document.body.appendChild(ele)
+              ele.click()
+              document.body.removeChild(ele)
+              window.URL.revokeObjectURL(ele.href)
+              this.showToast('JSONファイルを出力しました。', 'success')
+            } catch (e) {
+              this.showToast(
+                `JSONファイルの出力に失敗しました: ${e.message}`,
+                'error'
+              )
+            }
+          },
+
+          async init() {
+            await this.listCollections()
+            this.dc_collections_selected = this.dc_collections[0]
+          }
+        },
+
+        async mounted() {
+           console.log('Vue app mounted.')
+           await this.init()
+
+           this.import_count = this.import_datas.length;
+         }
+      });
+
+      // Vuetifyの使用
+      app.use(vuetify);
+      
+      // アプリケーションのマウント
+      app.mount('#app');
+    </script>
+  </body>
+</html>

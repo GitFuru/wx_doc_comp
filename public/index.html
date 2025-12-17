@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/vuetify@3/dist/vuetify.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WATSON TOOLS</title>
+  <style>
+    [v-cloak] {
+      display: none;
+    }
+    iframe {
+      width: 100%;
+      height: calc(100vh - 64px); /* App barの高さを引く */
+      border: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" v-cloak>
+    <v-app>
+      <v-main>
+        <v-container fluid>
+          <v-tabs v-model="tab" grow>
+            <v-tab value="search">ドキュメント文言検索</v-tab>
+            <v-tab value="excel">仕様書検索</v-tab>
+            <v-tab value="import">仕様書登録</v-tab>
+            <v-tab value="llm">LLMテスト</v-tab>
+          </v-tabs>
+
+          <v-window v-model="tab">
+            <v-window-item value="search">
+              <iframe src="search.html"></iframe>
+            </v-window-item>
+            <v-window-item value="excel">
+              <iframe src="excel.html"></iframe>
+            </v-window-item>
+            <v-window-item value="import">
+              <iframe src="import.html"></iframe>
+            </v-window-item>
+            <v-window-item value="llm">
+              <iframe src="llm.html"></iframe>
+            </v-window-item>
+          </v-window>
+        </v-container>
+      </v-main>
+    </v-app>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js",
+      "vuetify": "https://unpkg.com/vuetify@3/dist/vuetify.esm.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import { createApp } from 'vue';
+    import { createVuetify, components, directives } from 'vuetify';
+
+    const vuetify = createVuetify({
+      components,
+      directives
+    });
+
+    const app = createApp({
+      data: () => ({
+        tab: 'search', // デフォルトタブ
+      }),
+    });
+
+    app.use(vuetify);
+    app.mount('#app');
+  </script>
+</body>
+
+</html>
